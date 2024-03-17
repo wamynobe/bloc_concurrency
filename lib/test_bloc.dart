@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 
 part 'test_event.dart';
 part 'test_state.dart';
@@ -16,7 +17,7 @@ class TestBloc extends Bloc<TestEvent, TestState> {
             emit(state.copyWith(status: Status.success, data: mockData));
           },
           filter: (query) async {
-            await _filter(query);
+            await _filter(query, emit);
           },
           fetchMore: (query, isDone) async {
             await _fetchMore(query, emit);
@@ -24,6 +25,7 @@ class TestBloc extends Bloc<TestEvent, TestState> {
           },
         );
       },
+      transformer: restartable(),
     );
   }
 
@@ -59,18 +61,22 @@ class TestBloc extends Bloc<TestEvent, TestState> {
     'Data 990',
   ];
 
-  Future<void> _filter(String filter) async {
+  Future<void> _filter(String filter, Emitter<TestState> emit) async {
     emit(state.copyWith(status: Status.loading, query: filter));
     final data = await _fetchData(timeToFetch: 3, query: filter);
+    // return if event was canceled
+    if (emit.isDone) return;
     emit(state.copyWith(status: Status.success, data: data));
   }
 
-  Future<void> _fetchMore(String query, Emitter<TestState> emitter) async {
+  Future<void> _fetchMore(String query, Emitter<TestState> emit) async {
     emit(state.copyWith(query: query));
     final data = await _fetchData(
       timeToFetch: 5,
       query: query,
     );
+    // return if event was canceled
+    if (emit.isDone) return;
     final more = mockMore;
     emit(state.copyWith(status: Status.success, data: more..addAll(data)));
   }
